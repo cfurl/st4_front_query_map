@@ -152,4 +152,19 @@ plot_bin_map<-function(
 }
 
 
+bin_map_dark<-plot_bin_map(title = 'Precipitation Across Texas Hill Country July 3-4, 2025',
+                           subtitle= "STG4 QPE BIN 4km. Guadalupe Basin outlined",
+                           font = "Open Sans",
+                           map_rain = map_rain,
+                           map_streams = streams,
+                           map_lakes = lakes,
+                           pal_water='black',
+                           pal_title='white',
+                           pal_subtitle='white',
+                           pal_outline='black',
+                           pal_legend = 'YlGnBu',
+                           pal_bin_outline='black',
+                           pal_legend_text='white',
+                           map_type='cartodark')
 
+bin_map_dark
