@@ -51,7 +51,7 @@ map <- sf::read_sf("./gis/usgs_dissolved.shp")
 streams <- read_sf("./gis/streams_recharge.shp")
 lakes <- read_sf("./gis/reservoirs.shp")
 
-# chat gpt, can remove maybe 8.8.25
+# chat gpt, can remove maybe 8.8.25, this allowed radar bins to be transparent
 hrap_crs <- "+proj=stere +lat_0=90 +lat_ts=60 +lon_0=-105 
              +a=6371200 +b=6371200 +units=m +no_defs"
 map_rain <- st_set_crs(map_rain, hrap_crs) |> 
@@ -84,8 +84,6 @@ plot_bin_map<-function(
     pal_outline='black',
     pal_bin_outline='black',
     pal_legend_text='white',
-    #pal_legend = 'YlGnBu',
-    pal_legend = 'RdYlBu',
     bin_alpha = 0.7,
     map_type='cartodark'
 ){
@@ -101,20 +99,28 @@ plot_bin_map<-function(
   
   # Convert bbox to an sf object for ggplot compatibility
   bbox_sf <- st_as_sfc(bbox)
-  
   bbox_transformed <- st_transform(bbox_sf, crs = coord_sys)
   
-  outline<-map|>summarise(geometry = st_union(geometry))|>  st_cast("MULTILINESTRING")  
+  outline<-map|>
+    summarise(geometry = st_union(geometry))|>
+    st_cast("MULTILINESTRING")  
   
-  title_pos <- st_sfc(st_point(c(-100.88, 30.43)), crs = 4326)|>st_transform(point, crs = 3857)
-  title_pos<-as.data.frame(st_coordinates(title_pos))
-  subtitle_pos <- st_sfc(st_point(c(-100.88, 30.43-0.085)), crs = 4326)|>st_transform(point, crs = 3857)
-  subtitle_pos<-as.data.frame(st_coordinates(subtitle_pos))
+  title_pos <- st_sfc(st_point(c(-100.88, 30.43)), crs = 4326) |> 
+    st_transform(crs = 3857) |> 
+    st_coordinates() |> as.data.frame()
+  
+  subtitle_pos <- st_sfc(st_point(c(-100.88, 30.43 - 0.085)), crs = 4326) |> 
+    st_transform(crs = 3857) |> 
+    st_coordinates() |> as.data.frame()
   
   # --- Static legend settings (always show full range) ---
-  rain_breaks  <- c(0, 0.25, 0.5, 1, 2, 3, 4, 6, 8, 10, 12)
-  rain_labels  <- c("0","0.25","0.5","1","2","3","4","6","8","10","12+")
+  rain_breaks  <- c(0, 0.1, 0.25, 0.5, 1, 2, 3, 4, 6, 8, 10, 12)
+  rain_labels  <- c("0","0.1","0.25","0.5","1","2","3","4","6","8","10","12+")
   rain_limits  <- c(0, 12)
+  
+  # --- Set 0 rainfall to NA for transparency ---
+  map_rain <- map_rain |>
+    mutate(fill_val = ifelse(sum_rain_in == 0, NA_real_, sum_rain_in))
   
   plot<-ggplot()+
     annotation_map_tile(
@@ -123,20 +129,26 @@ plot_bin_map<-function(
     )+
     annotate(geom="text",x= title_pos$X,y=title_pos$Y,label=title,size=8,hjust=0, color = pal_title, family=font, fontface='bold')+
     annotate(geom="text",x= subtitle_pos$X,y=subtitle_pos$Y,label=subtitle,size=5,hjust=0, color = pal_subtitle, family=font)+
-    geom_sf(data=map_rain, mapping=aes(fill=sum_rain_in),color=pal_bin_outline, alpha=bin_alpha)+
+    geom_sf(
+      data = map_rain, 
+      mapping = aes(fill = fill_val), 
+      color = pal_bin_outline, alpha = bin_alpha, na.rm = FALSE
+    ) +
     geom_sf(data = outline|>st_transform(crs = coord_sys), color = pal_outline, linewidth = 0.4) +  
     #geom_sf(data=guad|>st_transform(crs = coord_sys),fill=NA, color="salmon", linewidth = 0.9)+
     geom_sf(data=map_lakes|>st_transform(crs = coord_sys), fill= pal_water, color= pal_water, linewidth = 0.2)+
     geom_sf(data=map_streams|>st_transform(crs = coord_sys), color= pal_water)+
-    scale_fill_fermenter(
-      palette   = pal_legend,
-      direction = -1,
+    
+    scale_fill_stepsn(
+      colours = c("#82D3F0","#0826A2","#22FE05","#248418",
+                  "#F6FB07","#FFC348","#E01E17","#8C302C",
+                  "#CC17DA","#AE60B3","#FDF5FF"),
       breaks    = rain_breaks,
       limits    = rain_limits,
       labels    = rain_labels,
       oob       = scales::squish,
-      na.value  = "transparent",
-      name      = "Rainfall (in)"
+      name      = "Rainfall (in)",
+      na.value  = NA  # keep transparency for NA (zero rainfall)
     ) +
     guides(
       fill = guide_colorsteps(
