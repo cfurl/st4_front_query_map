@@ -11,7 +11,8 @@ library(ggplot2)
 library(prettymapr)
 
 # remove this from container setup, this gives your local dev the AWS access
-readRenviron(".Renviron")
+readRenviron("../.Renviron") # this is for keys one level up from root directory
+#readRenviron(".Renviron")
 
 # make sure you can connect to your bucket and open SubTreeFileSystem and identify path
 bucket <- s3_bucket("stg4-texas-24hr")
@@ -31,6 +32,8 @@ stg4_24hr_texas_parq <- open_dataset(s3_path)
 # Create exact timestamps (UTC) for noon on yesterday and today
 t1 <- as.POSIXct(paste(Sys.Date() - 1, "12:00:00"), tz = "UTC")
 t2 <- as.POSIXct(paste(Sys.Date(),     "12:00:00"), tz = "UTC")
+# use this in ggplot2 label. Idea here is this is the time you started mapping rain.  So label is "rain from t_map_label to t2" should cover 48hr.
+begin_time_map_label <- as.POSIXct(paste(Sys.Date() - 2, "12:00:00"), tz = "UTC") 
 
 # carrying these commands around for whole state, could clip first
 d <- stg4_24hr_texas_parq |>
@@ -48,16 +51,24 @@ map <- sf::read_sf("./gis/usgs_dissolved.shp")
 streams <- read_sf("./gis/streams_recharge.shp")
 lakes <- read_sf("./gis/reservoirs.shp")
 
+# chat gpt, can remove maybe 8.8.25
+hrap_crs <- "+proj=stere +lat_0=90 +lat_ts=60 +lon_0=-105 
+             +a=6371200 +b=6371200 +units=m +no_defs"
+map_rain <- st_set_crs(map_rain, hrap_crs) |> 
+  st_transform(4326)
+map      <- st_set_crs(map, 4326)  # outline already in lat/lon
+streams  <- st_transform(streams, 4326)
+lakes    <- st_transform(lakes, 4326)
+###################################
+
 map_rain <- map|>
   left_join(d, by = "grib_id")|>
   mutate(cubic_m_precip = bin_area * sum_rain * 0.001)|>
   mutate(sum_rain_in = sum_rain/25.4)
 
-
-
-
-
-
+#create local timestamps (Amer/Chicago) for labels
+end_time_local <- with_tz(t2, "America/Chicago")
+begin_time_local <- with_tz(begin_time_map_label, "America/Chicago")
 
 # function from Tanya
 plot_bin_map<-function(
@@ -80,11 +91,9 @@ plot_bin_map<-function(
 ){
   
   bbox <- st_bbox(c(
-    # xmin = -100.85,
-    xmin = -100.60,
+    xmin = -100.85,
     ymin = 29.0, 
-    #xmax = -97.75, 
-    xmax = -97.80,
+    xmax = -97.75, 
     ymax = 30.47
   ), crs = 4326)
   
@@ -97,11 +106,15 @@ plot_bin_map<-function(
   
   outline<-map|>summarise(geometry = st_union(geometry))|>  st_cast("MULTILINESTRING")  
   
-  title_pos <- st_sfc(st_point(c(-100.5, 30.43)), crs = 4326)|>st_transform(point, crs = 3857)
+  title_pos <- st_sfc(st_point(c(-100.88, 30.43)), crs = 4326)|>st_transform(point, crs = 3857)
   title_pos<-as.data.frame(st_coordinates(title_pos))
-  subtitle_pos <- st_sfc(st_point(c(-100.5, 30.43-0.085)), crs = 4326)|>st_transform(point, crs = 3857)
+  subtitle_pos <- st_sfc(st_point(c(-100.88, 30.43-0.085)), crs = 4326)|>st_transform(point, crs = 3857)
   subtitle_pos<-as.data.frame(st_coordinates(subtitle_pos))
   
+  # --- Static legend settings (always show full range) ---
+  rain_breaks  <- c(0, 0.25, 0.5, 1, 2, 3, 4, 6, 8, 10, 12)
+  rain_labels  <- c("0","0.25","0.5","1","2","3","4","6","8","10","12+")
+  rain_limits  <- c(0, 12)
   
   plot<-ggplot()+
     annotation_map_tile(
@@ -116,19 +129,20 @@ plot_bin_map<-function(
     geom_sf(data=map_lakes|>st_transform(crs = coord_sys), fill= pal_water, color= pal_water, linewidth = 0.2)+
     geom_sf(data=map_streams|>st_transform(crs = coord_sys), color= pal_water)+
     scale_fill_fermenter(
-      palette = pal_legend, 
-      #breaks = c(2,6,seq(from=25, to=175, by=25)),  # Customize bins
-      #breaks = c(10,25,37,seq(from=50, to=550, by=50)),  # Customize bins
-      breaks = c(0.5,1,2,3,seq(from= 4, to=12, by=2)),  # Customize bins
-      #breaks = c(seq(from=50, to=550, by=50)),  # Customize bins
-      # direction = 1,  # Normal order for YlOrRd
-      direction = -1,  # Normal order for YlOrRd
-      name = "Rainfall (in)"  # Legend title
+      palette   = pal_legend,
+      direction = -1,
+      breaks    = rain_breaks,
+      limits    = rain_limits,
+      labels    = rain_labels,
+      oob       = scales::squish,
+      na.value  = "transparent",
+      name      = "Rainfall (in)"
     ) +
     guides(
-      fill = guide_colorbar(
+      fill = guide_colorsteps(
         title.position = "top",
-        title.vjust = 0.1 
+        title.vjust = 0.1,
+        show.limits = TRUE
       )
     )+
     coord_sf(
@@ -152,19 +166,42 @@ plot_bin_map<-function(
 }
 
 
-bin_map_dark<-plot_bin_map(title = 'Precipitation Across Texas Hill Country July 3-4, 2025',
-                           subtitle= "STG4 QPE BIN 4km. Guadalupe Basin outlined",
-                           font = "Open Sans",
-                           map_rain = map_rain,
-                           map_streams = streams,
-                           map_lakes = lakes,
-                           pal_water='black',
-                           pal_title='white',
-                           pal_subtitle='white',
-                           pal_outline='black',
-                           pal_legend = 'YlGnBu',
-                           pal_bin_outline='black',
-                           pal_legend_text='white',
-                           map_type='cartodark')
+#bin_map_dark<-plot_bin_map(title = 'Edwards Aquifer Recharge Zone',
+ #                          subtitle= paste("Precipitation from", format(begin_time_local, "%Y-%m-%d %H:%M %Z"), "to",format(end_time_local, "%Y-%m-%d %H:%M %Z")),
+  #                         font = "Open Sans",
+   #                        map_rain = map_rain,
+    #                       map_streams = streams,
+     #                      map_lakes = lakes,
+      #                     pal_water='black',
+       #                    pal_title='white',
+        #                   pal_subtitle='white',
+         #                  pal_outline='black',
+          #                 pal_legend = 'YlGnBu',
+           #                pal_bin_outline='black',
+            #               pal_legend_text='white',
+             #              map_type='cartodark')
 
-bin_map_dark
+#bin_map_dark
+
+
+#light mode
+bin_map_light<-plot_bin_map(title = 'Edwards Aquifer Recharge Zone',
+                            subtitle= paste("Precipitation from", format(begin_time_local, "%Y-%m-%d %H:%M %Z"), "to",format(end_time_local, "%Y-%m-%d %H:%M %Z")),
+                            font = "Open Sans",
+                            map_rain = map_rain,
+                            map_streams = streams,
+                            map_lakes = lakes,
+                            #pal_water='#697984',
+                            pal_water = '#2C6690',
+                            pal_title='black',
+                            # pal_legend = 'YlOrRd',
+                            bin_alpha = 0.9,
+                            pal_subtitle='black',
+                            pal_outline="#697984",
+                            pal_bin_outline='white',
+                            pal_legend_text='black',
+                            map_type='cartolight')
+
+
+
+bin_map_light
