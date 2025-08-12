@@ -10,31 +10,41 @@ library(ggspatial)
 library(ggplot2)
 library(prettymapr)
 
+
+######################## Some S3 things #####################
 # remove this from container setup, this gives your local dev the AWS access
 readRenviron("../.Renviron") # this is for keys one level up from root directory
-#readRenviron(".Renviron")
+#readRenviron(".Renviron") # when it's in gitignore
 
 # make sure you can connect to your bucket and open SubTreeFileSystem and identify path
 bucket <- s3_bucket("stg4-texas-24hr")
 s3_path <- bucket$path("")
 
-# this is me messing around identifying what is in the buckets
-bucket$ls(recursive = TRUE)
-bucket$ls("year=2025",recursive = FALSE)
-
-
 #connect to the .parq files on the s3 storage
 stg4_24hr_texas_parq <- open_dataset(s3_path)
+
+# this is me messing around identifying what is in the buckets
+#bucket$ls(recursive = TRUE)
+#bucket$ls("year=2025",recursive = FALSE)
 
 #view whole parq
 #parq <- collect(stg4_24hr_texas_parq)
 
-# Create exact timestamps (UTC) for noon on yesterday and today
-t1 <- as.POSIXct(paste(Sys.Date() - 1, "12:00:00"), tz = "UTC")
-t2 <- as.POSIXct(paste(Sys.Date(),     "12:00:00"), tz = "UTC")
-# use this in ggplot2 label. Idea here is this is the time you started mapping rain.  So label is "rain from t_map_label to t2" should cover 48hr.
-begin_time_map_label <- as.POSIXct(paste(Sys.Date() - 2, "12:00:00"), tz = "UTC") 
+############################ get 48hours data and get graph dates #############
 
+# Create exact timestamps (UTC) for noon on yesterday and today
+t1 <- as.POSIXct(paste(Sys.Date() - 10, "12:00:00"), tz = "UTC") # -1
+t2 <- as.POSIXct(paste(Sys.Date()-9,     "12:00:00"), tz = "UTC")# -0
+# use this in ggplot2 label. Idea here is this is the time you started mapping rain.  So label is "rain from t_map_label to t2" should cover 48hr.
+t3 <- as.POSIXct(paste(Sys.Date() - 11, "12:00:00"), tz = "UTC")  # should be -2
+
+#create local timestamps (Amer/Chicago) for labels
+end_time_local <- with_tz(t2, "America/Chicago")
+begin_time_local <- with_tz(t3, "America/Chicago")
+
+
+
+# This is where you query the parq files by time (not location yet)
 # carrying these commands around for whole state, could clip first
 d <- stg4_24hr_texas_parq |>
  filter (time %in% c(t1,t2)) |>
@@ -44,33 +54,20 @@ d <- stg4_24hr_texas_parq |>
   arrange(desc(sum_rain)) |>
   collect()
 
-
-### map me
-#for bin map 
+# call the gis layers you want mapped
 map <- sf::read_sf("./gis/usgs_dissolved.shp")
 streams <- read_sf("./gis/streams_recharge.shp")
 lakes <- read_sf("./gis/reservoirs.shp")
 
-# chat gpt, can remove maybe 8.8.25, this allowed radar bins to be transparent
-hrap_crs <- "+proj=stere +lat_0=90 +lat_ts=60 +lon_0=-105 
-             +a=6371200 +b=6371200 +units=m +no_defs"
-map_rain <- st_set_crs(map_rain, hrap_crs) |> 
-  st_transform(4326)
-map      <- st_set_crs(map, 4326)  # outline already in lat/lon
-streams  <- st_transform(streams, 4326)
-lakes    <- st_transform(lakes, 4326)
-###################################
-
+# this is where you subset the statewide set of bins by your shapefile area of interest
 map_rain <- map|>
   left_join(d, by = "grib_id")|>
   mutate(cubic_m_precip = bin_area * sum_rain * 0.001)|>
   mutate(sum_rain_in = sum_rain/25.4)
 
-#create local timestamps (Amer/Chicago) for labels
-end_time_local <- with_tz(t2, "America/Chicago")
-begin_time_local <- with_tz(begin_time_map_label, "America/Chicago")
 
-# function from Tanya
+
+# Mapping function edited from Tanya's work
 plot_bin_map<-function(
     title = 'Edwards Aquifer Recharge Zone',
     subtitle= NA,
@@ -101,9 +98,7 @@ plot_bin_map<-function(
   bbox_sf <- st_as_sfc(bbox)
   bbox_transformed <- st_transform(bbox_sf, crs = coord_sys)
   
-  outline<-map|>
-    summarise(geometry = st_union(geometry))|>
-    st_cast("MULTILINESTRING")  
+  outline <- map |> summarise(geometry = st_union(geometry)) |> st_cast("MULTILINESTRING")  
   
   title_pos <- st_sfc(st_point(c(-100.88, 30.43)), crs = 4326) |> 
     st_transform(crs = 3857) |> 
@@ -178,28 +173,10 @@ plot_bin_map<-function(
 }
 
 
-#bin_map_dark<-plot_bin_map(title = 'Edwards Aquifer Recharge Zone',
- #                          subtitle= paste("Precipitation from", format(begin_time_local, "%Y-%m-%d %H:%M %Z"), "to",format(end_time_local, "%Y-%m-%d %H:%M %Z")),
-  #                         font = "Open Sans",
-   #                        map_rain = map_rain,
-    #                       map_streams = streams,
-     #                      map_lakes = lakes,
-      #                     pal_water='black',
-       #                    pal_title='white',
-        #                   pal_subtitle='white',
-         #                  pal_outline='black',
-          #                 pal_legend = 'YlGnBu',
-           #                pal_bin_outline='black',
-            #               pal_legend_text='white',
-             #              map_type='cartodark')
-
-#bin_map_dark
-
-
 #light mode
 bin_map_light<-plot_bin_map(title = 'Edwards Aquifer Recharge Zone',
                             subtitle= paste("Precipitation from", format(begin_time_local, "%Y-%m-%d %H:%M %Z"), "to",format(end_time_local, "%Y-%m-%d %H:%M %Z")),
-                            font = "Open Sans",
+                            font = "",
                             map_rain = map_rain,
                             map_streams = streams,
                             map_lakes = lakes,
