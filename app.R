@@ -5,11 +5,11 @@ library("tidyr")
 library("readr")
 library("stringr")
 library("aws.s3")
-library(sf)
-library(ggspatial)
-library(ggplot2)
-library(prettymapr)
-library(shiny)
+library("sf")
+library("ggspatial")
+library("ggplot2")
+library("prettymapr")
+library("shiny")
 
 
 ######################## Some S3 things #####################
@@ -34,13 +34,14 @@ stg4_24hr_texas_parq <- open_dataset(s3_path)
 ############################ get 48hours data and get graph dates #############
 
 # Create exact timestamps (UTC) for noon on yesterday and today
-t1 <- as.POSIXct(paste(Sys.Date() - 10, "12:00:00"), tz = "UTC") # -1
-t2 <- as.POSIXct(paste(Sys.Date()-9,     "12:00:00"), tz = "UTC")# -0
+t1 <- as.POSIXct(paste(Sys.Date() - 0, "12:00:00"), tz = "UTC")  # today 0
+t2 <- as.POSIXct(paste(Sys.Date() - 1, "12:00:00"), tz = "UTC") # yesterday 1
+t3 <- as.POSIXct(paste(Sys.Date()- 2,     "12:00:00"), tz = "UTC")# two days ago, used only for labeling start time of graph 2
 # use this in ggplot2 label. Idea here is this is the time you started mapping rain.  So label is "rain from t_map_label to t2" should cover 48hr.
-t3 <- as.POSIXct(paste(Sys.Date() - 11, "12:00:00"), tz = "UTC")  # should be -2
+
 
 #create local timestamps (Amer/Chicago) for labels
-end_time_local <- with_tz(t2, "America/Chicago")
+end_time_local <- with_tz(t1, "America/Chicago")
 begin_time_local <- with_tz(t3, "America/Chicago")
 
 
@@ -56,9 +57,15 @@ d <- stg4_24hr_texas_parq |>
   collect()
 
 # call the gis layers you want mapped
-map <- sf::read_sf("./gis/usgs_dissolved.shp")
-streams <- read_sf("./gis/streams_recharge.shp")
-lakes <- read_sf("./gis/reservoirs.shp")
+#map <- sf::read_sf("./gis/usgs_dissolved.shp")
+#streams <- read_sf("./gis/streams_recharge.shp")
+#lakes <- read_sf("./gis/reservoirs.shp")
+
+map <- sf::read_sf("/home/gis/usgs_dissolved.shp")
+streams <- read_sf("/home/gis/streams_recharge.shp")
+lakes <- read_sf("/home/gis/reservoirs.shp")
+
+# make these gis paths compatible with container
 
 # this is where you subset the statewide set of bins by your shapefile area of interest
 map_rain <- map|>
