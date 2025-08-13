@@ -17,6 +17,12 @@ library("shiny")
 #readRenviron("../.Renviron") # this is for keys one level up from root directory
 #readRenviron(".Renviron") # when it's in gitignore
 
+required <- c("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION")
+missing  <- required[Sys.getenv(required) == ""]
+if (length(missing)) {
+  stop("Missing env vars on Connect: ", paste(missing, collapse = ", "))
+}
+
 # make sure you can connect to your bucket and open SubTreeFileSystem and identify path
 bucket <- s3_bucket("stg4-texas-24hr")
 s3_path <- bucket$path("")
@@ -57,13 +63,13 @@ d <- stg4_24hr_texas_parq |>
   collect()
 
 # call the gis layers you want mapped
-#map <- sf::read_sf("./gis/usgs_dissolved.shp")
-#streams <- read_sf("./gis/streams_recharge.shp")
-#lakes <- read_sf("./gis/reservoirs.shp")
+map <- sf::read_sf("./gis/usgs_dissolved.shp")
+streams <- read_sf("./gis/streams_recharge.shp")
+lakes <- read_sf("./gis/reservoirs.shp")
 
-map <- sf::read_sf("/home/gis/usgs_dissolved.shp")
-streams <- read_sf("/home/gis/streams_recharge.shp")
-lakes <- read_sf("/home/gis/reservoirs.shp")
+#map <- sf::read_sf("/home/gis/usgs_dissolved.shp")
+#streams <- read_sf("/home/gis/streams_recharge.shp")
+#lakes <- read_sf("/home/gis/reservoirs.shp")
 
 # make these gis paths compatible with container
 
