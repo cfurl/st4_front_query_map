@@ -40,9 +40,9 @@ stg4_24hr_texas_parq <- open_dataset(s3_path)
 ############################ get 48hours data and get graph dates #############
 
 # Create exact timestamps (UTC) for noon on yesterday and today
-t1 <- as.POSIXct(paste(Sys.Date() - 0, "12:00:00"), tz = "UTC")  # today 0
-t2 <- as.POSIXct(paste(Sys.Date() - 1, "12:00:00"), tz = "UTC") # yesterday 1
-t3 <- as.POSIXct(paste(Sys.Date()- 2,     "12:00:00"), tz = "UTC")# two days ago, used only for labeling start time of graph 2
+t1 <- as.POSIXct(paste(Sys.Date() - 10, "12:00:00"), tz = "UTC")  # today 0
+t2 <- as.POSIXct(paste(Sys.Date() - 11, "12:00:00"), tz = "UTC") # yesterday 1
+t3 <- as.POSIXct(paste(Sys.Date()- 12,     "12:00:00"), tz = "UTC")# two days ago, used only for labeling start time of graph 2
 # use this in ggplot2 label. Idea here is this is the time you started mapping rain.  So label is "rain from t_map_label to t2" should cover 48hr.
 
 
