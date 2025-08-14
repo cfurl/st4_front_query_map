@@ -10,7 +10,7 @@ library("ggspatial")
 library("ggplot2")
 library("prettymapr")
 library("shiny")
-
+#library("ggiraph")
 
 ######################## Some S3 things #####################
 # remove this from container setup, this gives your local dev the AWS access
@@ -139,6 +139,7 @@ plot_bin_map<-function(
     )+
     annotate(geom="text",x= title_pos$X,y=title_pos$Y,label=title,size=8,hjust=0, color = pal_title, family=font, fontface='bold')+
     annotate(geom="text",x= subtitle_pos$X,y=subtitle_pos$Y,label=subtitle,size=5,hjust=0, color = pal_subtitle, family=font)+
+    #ggiraph::geom_sf_interactive(data=map_rain, mapping=aes(fill=fill_val, data_id = grib_id, tooltip = paste0("<b>Rainfall</b>: ",fill_val,"in")),color=pal_bin_outline, alpha=bin_alpha)+
     geom_sf(
       data = map_rain, 
       mapping = aes(fill = fill_val), 
