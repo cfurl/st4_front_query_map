@@ -48,15 +48,15 @@ t3 <- as.POSIXct(paste(Sys.Date()- 2,     "12:00:00"), tz = "UTC")# two days ago
 
 #create local timestamps (Amer/Chicago) for labels
 end_time_local <- with_tz(t1, "America/Chicago")
-begin_time_local <- with_tz(t3, "America/Chicago")
-
+#begin_time_local <- with_tz(t3, "America/Chicago")
+begin_time_local <- with_tz(t2, "America/Chicago")
 
 
 # This is where you query the parq files by time (not location yet)
 # carrying these commands around for whole state, could clip first
 d <- stg4_24hr_texas_parq |>
 # filter (time %in% c(t1,t2)) |>
-  filter (time %in% c(t2)) |>
+  filter (time %in% c(t1)) |>
   group_by (grib_id) %>%
   summarize(
     sum_rain = sum(rain_mm, na.rm=TRUE)) %>%
