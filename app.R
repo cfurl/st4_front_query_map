@@ -189,18 +189,22 @@ plot_bin_map<-function(
 
 
 
+#ui <- fluidPage(
+#  tags$head(tags$title("Rainfall Map")),
+#  fluidRow(
+#    column(
+#      width = 12,
+#      plotOutput("rain_map", height = "800px")
+#    )
+#  )
+#)
+
+
 ui <- fluidPage(
+  style = "padding:0; margin:0;",
   tags$head(tags$title("Rainfall Map")),
-  fluidRow(
-    column(
-      width = 12,
-      plotOutput("rain_map", height = "800px")
-    )
-  )
+  plotOutput("rain_map", width = "100%", height = "100vh")
 )
-
-
-
 
 
 
