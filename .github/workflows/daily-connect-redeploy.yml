@@ -2,7 +2,7 @@ name: Daily Connect redeploy nudge
 
 on:
   schedule:
-    # 8:45 AM America/Chicago (DST Mar–Oct)
+    # 8:45 AM America/Chicago (DST Mar–Oct)d
     - cron: '58 13 * 3-10 *'
     # 8:45 AM America/Chicago (Standard Time Nov–Feb)
     - cron: '58 14 * 11,12,1,2 *'
