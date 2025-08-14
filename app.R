@@ -56,7 +56,7 @@ begin_time_local <- with_tz(t3, "America/Chicago")
 # carrying these commands around for whole state, could clip first
 d <- stg4_24hr_texas_parq |>
 # filter (time %in% c(t1,t2)) |>
-  filter (time %in% c(t1)) |>
+  filter (time %in% c(t2)) |>
   group_by (grib_id) %>%
   summarize(
     sum_rain = sum(rain_mm, na.rm=TRUE)) %>%
