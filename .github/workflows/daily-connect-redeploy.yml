@@ -3,9 +3,9 @@ name: Daily Connect redeploy nudge
 on:
   schedule:
     # 8:45 AM America/Chicago (DST Mar–Oct)
-    - cron: "45 13 * 3-10 *"
+    - cron: "57 13 * 3-10 *"
     # 8:45 AM America/Chicago (Standard Nov–Feb)
-    - cron: "45 14 * 11,12,1,2 *"
+    - cron: "57 14 * 11,12,1,2 *"
   workflow_dispatch:
 
 jobs:
