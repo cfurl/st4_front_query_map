@@ -24,38 +24,45 @@ if (length(missing)) {
 }
 
 # make sure you can connect to your bucket and open SubTreeFileSystem and identify path
+# then connect to the .parq files on the s3 storage
 bucket <- s3_bucket("stg4-texas-24hr")
 s3_path <- bucket$path("")
-
-#connect to the .parq files on the s3 storage
 stg4_24hr_texas_parq <- open_dataset(s3_path)
 
-# this is me messing around identifying what is in the buckets
-#bucket$ls(recursive = TRUE)
-#bucket$ls("year=2025",recursive = FALSE)
+############################ time stamps #############
 
-#view whole parq
-#parq <- collect(stg4_24hr_texas_parq)
+current_utc_date_time <- with_tz(Sys.time(), "UTC")
+current_central_date_time <- with_tz(Sys.time(), "America/Chicago")
+current_utc_time <- format(with_tz(Sys.time(), "UTC"), "%H:%M:%S")
+current_utc_date <- as_date(with_tz(Sys.time(), "UTC"))
 
-############################ get 48hours data and get graph dates #############
+
+# parquet gets populated with most recent 24hr file at 13:45 UTC
+# new shiny page pushed to posit.cloud.connect at 13:57 UTC
+
+# This solves the problem of when the UTC time is in the current day, but the STG4 hasn't dopped yet, so the script is looking
+# for parquet files that haven't been populated yet. Until you reach 13:52 (when parquet is safely populated), it kicks you
+# back to yesterday
+t1_offset <- case_when (current_utc_time >= "00:00" & current_utc_time <= "13:52" ~ -1, TRUE ~ 0)
+t2_offset <- case_when( current_utc_time >= "00:00" & current_utc_time <= "13:52" ~ -2, TRUE ~ -1)
 
 # Create exact timestamps (UTC) for noon on yesterday and today
-t1 <- as.POSIXct(paste(Sys.Date() - 0, "12:00:00"), tz = "UTC")  # today 0
-t2 <- as.POSIXct(paste(Sys.Date() - 1, "12:00:00"), tz = "UTC") # yesterday 1
-t3 <- as.POSIXct(paste(Sys.Date()- 2,     "12:00:00"), tz = "UTC")# two days ago, used only for labeling start time of graph 2
-# use this in ggplot2 label. Idea here is this is the time you started mapping rain.  So label is "rain from t_map_label to t2" should cover 48hr.
+t1 <- as.POSIXct(paste(Sys.Date() + t1_offset, "12:00:00"), tz = "UTC")  # today 0
+t2 <- as.POSIXct(paste(Sys.Date() + t2_offset, "12:00:00"), tz = "UTC") # yesterday 1
 
+#create some timestamps for labels
 
-#create local timestamps (Amer/Chicago) for labels
+# Make local time labels for main title. Precipitation from xxxx - xxxx
 end_time_local <- with_tz(t1, "America/Chicago")
-#begin_time_local <- with_tz(t3, "America/Chicago")
 begin_time_local <- with_tz(t2, "America/Chicago")
+
+
+
 
 
 # This is where you query the parq files by time (not location yet)
 # carrying these commands around for whole state, could clip first
 d <- stg4_24hr_texas_parq |>
-# filter (time %in% c(t1,t2)) |>
   filter (time %in% c(t1)) |>
   group_by (grib_id) %>%
   summarize(
@@ -68,24 +75,17 @@ map <- sf::read_sf("./gis/usgs_dissolved.shp")
 streams <- read_sf("./gis/streams_recharge.shp")
 lakes <- read_sf("./gis/reservoirs.shp")
 
-#map <- sf::read_sf("/home/gis/usgs_dissolved.shp")
-#streams <- read_sf("/home/gis/streams_recharge.shp")
-#lakes <- read_sf("/home/gis/reservoirs.shp")
-
-# make these gis paths compatible with container
-
 # this is where you subset the statewide set of bins by your shapefile area of interest
 map_rain <- map|>
   left_join(d, by = "grib_id")|>
   mutate(cubic_m_precip = bin_area * sum_rain * 0.001)|>
   mutate(sum_rain_in = sum_rain/25.4)
 
-
-
 # Mapping function edited from Tanya's work
 plot_bin_map<-function(
     title = 'Edwards Aquifer Recharge Zone',
     subtitle= NA,
+    note_title = NA,
     font = "Open Sans",
     map_rain = NA,
     map_streams = NA, 
@@ -123,6 +123,10 @@ plot_bin_map<-function(
     st_transform(crs = 3857) |> 
     st_coordinates() |> as.data.frame()
   
+  note_title_pos <- st_sfc(st_point(c(-100.88, 30.43 - 1.41)), crs = 4326) |> 
+    st_transform(crs = 3857) |> 
+    st_coordinates() |> as.data.frame()
+  
   # --- Static legend settings (always show full range) ---
   rain_breaks  <- c(0, 0.1, 0.25, 0.5, 1, 2, 3, 4, 6, 8, 10, 12)
   rain_labels  <- c("0","0.1","0.25","0.5","1","2","3","4","6","8","10","12+")
@@ -139,14 +143,9 @@ plot_bin_map<-function(
     )+
     annotate(geom="text",x= title_pos$X,y=title_pos$Y,label=title,size=8,hjust=0, color = pal_title, family=font, fontface='bold')+
     annotate(geom="text",x= subtitle_pos$X,y=subtitle_pos$Y,label=subtitle,size=5,hjust=0, color = pal_subtitle, family=font)+
-    #ggiraph::geom_sf_interactive(data=map_rain, mapping=aes(fill=fill_val, data_id = grib_id, tooltip = paste0("<b>Rainfall</b>: ",fill_val,"in")),color=pal_bin_outline, alpha=bin_alpha)+
-    geom_sf(
-      data = map_rain, 
-      mapping = aes(fill = fill_val), 
-      color = pal_bin_outline, alpha = bin_alpha, na.rm = FALSE
-    ) +
+    annotate(geom="text",x=  note_title_pos$X,y= note_title_pos$Y,label=note_title,size=2,hjust=0, color = pal_subtitle, family=font)+
+    geom_sf(data = map_rain, mapping = aes(fill = fill_val), color = pal_bin_outline, alpha = bin_alpha, na.rm = FALSE) +
     geom_sf(data = outline|>st_transform(crs = coord_sys), color = pal_outline, linewidth = 0.4) +  
-    #geom_sf(data=guad|>st_transform(crs = coord_sys),fill=NA, color="salmon", linewidth = 0.9)+
     geom_sf(data=map_lakes|>st_transform(crs = coord_sys), fill= pal_water, color= pal_water, linewidth = 0.2)+
     geom_sf(data=map_streams|>st_transform(crs = coord_sys), color= pal_water)+
     
@@ -176,7 +175,7 @@ plot_bin_map<-function(
     theme(
       text = element_text(family=font),
       legend.position = "inside",
-      legend.position.inside = c(0.75,0.1),  
+      legend.position.inside = c(0.70,0.1),  
       legend.direction = "horizontal", 
       legend.margin = margin(t = 0, r = 10, b = 0, l = 10),
       legend.title = element_text(size = 10, face='bold', color=pal_legend_text), 
@@ -211,11 +210,11 @@ ui <- fluidPage(
 
 
 
-
 server <- function(input, output, session) {
   output$rain_map <- renderPlot({
                             plot_bin_map(title = 'Edwards Aquifer Recharge Zone',
-                            subtitle= paste("Precipitation from", format(begin_time_local, "%Y-%m-%d %H:%M %Z"), "to",format(end_time_local, "%Y-%m-%d %H:%M %Z")),
+                            subtitle = paste("Precipitation from", format(begin_time_local, "%Y-%m-%d %H:%M %Z"), "to",format(end_time_local, "%Y-%m-%d %H:%M %Z")),
+                            note_title = paste("This map queried .parq at", format(current_utc_date_time, "%Y-%m-%d %H:%M %Z"), "and", format(current_central_date_time, "%Y-%m-%d %H:%M %Z")) ,
                             font = "",
                             map_rain = map_rain,
                             map_streams = streams,
