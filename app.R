@@ -43,32 +43,45 @@ current_utc_date <- as_date(with_tz(Sys.time(), "UTC"))
 # This solves the problem of when the UTC time is in the current day, but the STG4 hasn't dopped yet, so the script is looking
 # for parquet files that haven't been populated yet. Until you reach 13:52 (when parquet is safely populated), it kicks you
 # back to yesterday
-t1_offset <- case_when (current_utc_time >= "00:00" & current_utc_time <= "13:52" ~ -1, TRUE ~ 0)
-t2_offset <- case_when( current_utc_time >= "00:00" & current_utc_time <= "13:52" ~ -2, TRUE ~ -1)
+#t1_offset <- case_when (current_utc_time >= "00:00" & current_utc_time <= "13:52" ~ -0, TRUE ~ 0)
+#t1_offset <- case_when (current_utc_time >= "00:00" & current_utc_time <= "13:52" ~ -1, TRUE ~ 0)
+#t2_offset <- case_when( current_utc_time >= "00:00" & current_utc_time <= "13:52" ~ -2, TRUE ~ -1)
 
 # Create exact timestamps (UTC) for noon on yesterday and today
-t1 <- as.POSIXct(paste(Sys.Date() + t1_offset, "12:00:00"), tz = "UTC")  # today 0
-t2 <- as.POSIXct(paste(Sys.Date() + t2_offset, "12:00:00"), tz = "UTC") # yesterday 1
+t1 <- as.POSIXct(paste(Sys.Date() - 0, "12:00:00"), tz = "UTC")  # today 0
+t2 <- as.POSIXct(paste(Sys.Date() - 1, "12:00:00"), tz = "UTC") # yesterday 1
 
 #create some timestamps for labels
-
-# Make local time labels for main title. Precipitation from xxxx - xxxx
-end_time_local <- with_tz(t1, "America/Chicago")
-begin_time_local <- with_tz(t2, "America/Chicago")
-
 
 
 
 
 # This is where you query the parq files by time (not location yet)
 # carrying these commands around for whole state, could clip first
-d <- stg4_24hr_texas_parq |>
+
+time_check <- stg4_24hr_texas_parq |>
+  select(time)|>
   filter (time %in% c(t1)) |>
-  group_by (grib_id) %>%
-  summarize(
-    sum_rain = sum(rain_mm, na.rm=TRUE)) %>%
-  arrange(desc(sum_rain)) |>
   collect()
+
+if (nrow(time_check) == 0) {
+  time_filter<-t2
+} else {
+  time_filter<-t1
+}
+
+d <- stg4_24hr_texas_parq |>
+    filter (time %in% c(time_filter)) |>
+    group_by (grib_id) %>%
+    summarize(
+      sum_rain = sum(rain_mm, na.rm=TRUE)) %>%
+    arrange(desc(sum_rain)) |>
+    collect()
+
+# Make local time labels for main title. Precipitation from xxxx - xxxx
+end_time_local <- with_tz(time_filter, "America/Chicago")
+begin_time_local <- end_time_local - days(1)
+
 
 # call the gis layers you want mapped
 map <- sf::read_sf("./gis/usgs_dissolved.shp")
